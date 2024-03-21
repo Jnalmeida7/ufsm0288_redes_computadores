@@ -1,4 +1,4 @@
-# ELC1106 - Redes de comunicação de dados
+# UFSM0288 - Redes de Computadores
 
 # Códigos de simulação para MATLAB/Octave
 
