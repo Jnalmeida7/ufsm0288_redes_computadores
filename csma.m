@@ -20,6 +20,10 @@ t_sim = ceil(tempo/dt_sim);
 %taxa média máxima de chegada de quadros por segundo para cada estação
 taxa_max_quadro=ceil(taxa_bits/tam_quadro/n_est);
 
+%tamanho do quadro (ajustado por passos de simulação)
+tam_q = ceil(tam_quadro/taxa_bits/dt_sim);
+
+
 % número de simulações
 nsim = 10;
 
@@ -36,6 +40,7 @@ quadros_entregues = zeros(1,nsim);
 quadros_gerados = zeros(1,nsim);
 quadros_colididos = zeros(1,nsim);
 quadros_bloqueados = zeros(1,nsim);
+quadros_fila = zeros(1,nsim);
 
 tic;
 
@@ -98,9 +103,9 @@ for taxa=1:nsim;
                         tx_espera(n)=ceil(espera_max*rand(1)); % aguarda um tempo aleatório
                         tx_fila(n)=tx_fila(n)+1;
                         colin(n)=0;
-                              colisoes = colisoes + 1;
-                          else
-                              entregues = entregues + 1;
+                        colisoes = colisoes + 1;
+                    else
+                        entregues = entregues + 1;
                     end
                 end
             else
@@ -109,7 +114,7 @@ for taxa=1:nsim;
                 if (tx_fila(n)>0)
                     if (tx_espera(n)==0) && (nnz(tx_ativo_atr)==0)
                         tx_ativo(n)=1;
-                        tx_cnt(n)=ceil(tam_quadro/taxa_bits/dt_sim);
+                        tx_cnt(n)=tam_q;
                         tx_fila(n)=tx_fila(n)-1;
                     elseif tx_espera(n)>0
                         %decrementar o contador do tempo de espera
@@ -128,7 +133,7 @@ for taxa=1:nsim;
                 %verificar se o transmissor está pronto
                 if (tx_ativo(n)==0) && (tx_espera(n)==0) && (nnz(tx_ativo_atr)==0)
                    tx_ativo(n)=1;
-                   tx_cnt(n)=ceil(tam_quadro/taxa_bits/dt_sim);
+                   tx_cnt(n)=tam_q;
                 else
                    tx_fila(n)=tx_fila(n)+1;
                    if (tx_espera(n)==0) && (nnz(tx_ativo_atr)>0) % meio ocupado
@@ -152,6 +157,7 @@ for taxa=1:nsim;
 		    quadros_gerados(taxa)=quadros_gerados(taxa) + chegada_quadros/rodadas;
         quadros_colididos(taxa) = quadros_colididos(taxa) + colisoes/rodadas;
         quadros_bloqueados(taxa) = quadros_bloqueados(taxa) + bloqueios/rodadas;
+        quadros_fila(taxa) = quadros_fila(taxa) + sum(tx_fila)/rodadas;
 
     end
 end
@@ -173,5 +179,26 @@ hold on;
 grid
 xlabel('Taxa de geração de quadros (bps)');
 ylabel('Taxa de entrega de quadros - capacidade (bps)');
+
+
+% resultados
+if 1 % significado
+    disp('s => ID da simulação, G => gerados, T => transmitidos, E => entregues, C => colididos, F => na fila');
+end
+
+for s=1:nsim
+  disp(['s:' num2str(s) ' G:' num2str(quadros_gerados(s)) ' T:' num2str(quadros_transmitidos(s)) ' E:' num2str(quadros_entregues(s)) ' C:' num2str(quadros_colididos(s)) ' F:' num2str(quadros_fila(s)) ' S:' num2str(quadros_entregues(s)/tam_q)]);
+end
+
+% quadros_entregues
+% quadros_colididos
+% quadros_transmitidos
+% quadros_gerados
+% quadros_fila
+
+% gráfico de barras
+figure(fig); fig=fig+1;
+bar([quadros_gerados', quadros_entregues', quadros_colididos', quadros_fila']);
+
 
 end

@@ -97,15 +97,15 @@ for s=1:nsim
 			                tx_espera(n)=ceil(espera_max*rand(1));
 			                tx_fila(n)=tx_fila(n)+1;
 			                colin(n)=0;
-                            colisoes = colisoes + 1;
-                        else
-                            entregues = entregues + 1;
-                        end
+                      colisoes = colisoes + 1;
+                  else
+                      entregues = entregues + 1;
+                  end
 			        end
 			    else
 			    	% verificar se tem quadros em espera
 			        if (tx_fila(n)>0) && (tx_espera(n)==0)
-                        transmitidos = transmitidos+1;
+                  transmitidos = transmitidos+1;
 			            tx_ativo(n)=1;
 			            tx_cnt(n)=tam_q;
 			            tx_fila(n)=tx_fila(n)-1;
@@ -114,8 +114,8 @@ for s=1:nsim
                      %decrementar o contador do tempo de espera
                      tx_espera(n)=tx_espera(n)-1;
                   end
+              end
           end
-        end
 
         % verificar se chegou um novo quadro
         p_novo=rand(1);
@@ -154,7 +154,7 @@ if 1 % significado
 end
 
 for s=1:nsim
-  disp(['s:' num2str(s) ' G:' num2str(quadros_gerados(s)) ' T:' num2str(quadros_transmitidos(s)) ' E:' num2str(quadros_entregues(s)) ' C:' num2str(quadros_colididos(s)) ' F:' num2str(quadros_fila(s)) ' S:' num2str(quadros_entregues(s)/(quadros_entregues(s)+quadros_colididos(s)))]);
+  disp(['s:' num2str(s) ' G:' num2str(quadros_gerados(s)) ' T:' num2str(quadros_transmitidos(s)) ' E:' num2str(quadros_entregues(s)) ' C:' num2str(quadros_colididos(s)) ' F:' num2str(quadros_fila(s)) ' S:' num2str(quadros_entregues(s)/tam_q)]);
 end
 
 % quadros_entregues
