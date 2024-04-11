@@ -10,10 +10,10 @@ n_est = 10;
 taxa_bits = 1e4; % 10 kbps
 %tamanho do quadro em bits
 tam_quadro = 100; % portanto, haverá, no máximo, 1*1e4/100 = 100 quadros no tempo da simulação
-	
+
 %janela de tempo de espera aleatório em número de instantes de simulação
 espera_max =10*tam_quadro;
-  
+
 %tempo de transmissão do quadro em segundos
 t_quadro = tam_quadro/taxa_bits;
 %intervalo de tempo da simulação
@@ -28,14 +28,14 @@ nsim = 10;
 %número de repetições da simulação - para tirar a média
 rodadas = 4;
 
-%taxa média máxima de chegada de quadros por segundo para cada estação
-taxa_max_quadro=ceil(taxa_bits/tam_quadro/n_est);
+%taxa média máxima de chegada de quadros por estação
+taxa_max_quadro=ceil(taxa_bits*tempo/tam_quadro/n_est);
 
 % aumento da taxa de quadros
-dtaxa = ceil(taxa_max_quadro/nsim);
-taxas_quadro = 1:dtaxa:taxa_max_quadro;
 
-%tamanho do quadro (ajustado por passos de simulação) 
+taxas_quadro = taxa_max_quadro*(1/nsim:1/nsim:1);
+
+%tamanho do quadro (ajustado por passos de simulação)
 tam_q = ceil(tam_quadro/taxa_bits/dt_sim);
 
 % resultados da simulação
@@ -49,7 +49,7 @@ tic;
 
 %armazenador das transmissões
 transmis=zeros(nsim, n_est,t_sim);
-    
+
 for s=1:nsim
   taxa_quadro = taxas_quadro(s);
   %Progresso da simulação
@@ -57,7 +57,7 @@ for s=1:nsim
 	%taxa média de chegada de quadros por instante de simulação
 	tm_q=taxa_quadro*dt_sim;
 
-	for r=1:rodadas	
+	for r=1:rodadas
 		%VARIAVEIS DOS EVENTOS
 		%transmissores ativos
 		tx_ativo = zeros(1,n_est);
@@ -80,7 +80,7 @@ for s=1:nsim
         entregues = 0;
         % armazenador de quadros transmitidos
         transmitidos = 0;
-    
+
 		for t=1:t_sim
 			for n=1:n_est
 			    %verificar se o transmissor está ativo
@@ -116,7 +116,7 @@ for s=1:nsim
                   end
           end
         end
-          
+
         % verificar se chegou um novo quadro
         p_novo=rand(1);
         if p_novo < tm_q
@@ -130,23 +130,23 @@ for s=1:nsim
                tx_fila(n)=tx_fila(n)+1;
            end
         end
-       end     
+       end
         %verifica se houve colisão
         if sum(tx_ativo)>1
             colis(t)=1;
             colin = tx_ativo;
         end
     end
-      
-      % armazena resultados 
+
+      % armazena resultados
       quadros_transmitidos(s)=quadros_transmitidos(s) + transmitidos/rodadas;
       quadros_entregues(s)=quadros_entregues(s) + entregues/rodadas;
       quadros_gerados(s)=quadros_gerados(s) + chegada_quadros/rodadas;
       quadros_colididos(s) = quadros_colididos(s) + colisoes/rodadas;
-      quadros_fila(s) = quadros_fila(s) + sum(tx_fila)/rodadas;      
+      quadros_fila(s) = quadros_fila(s) + sum(tx_fila)/rodadas;
     end
 end
-toc;    
+toc;
 
 % resultados
 if 1 % significado
@@ -154,8 +154,8 @@ if 1 % significado
 end
 
 for s=1:nsim
-  disp(['s:' num2str(s) ' G:' num2str(quadros_gerados(s)) ' T:' num2str(quadros_transmitidos(s)) ' E:' num2str(quadros_entregues(s)) ' C:' num2str(quadros_colididos(s)) ' F:' num2str(quadros_fila(s)) ' S:' num2str(quadros_entregues(s)/(quadros_entregues(s)+quadros_colididos(s)))]); 
-end  
+  disp(['s:' num2str(s) ' G:' num2str(quadros_gerados(s)) ' T:' num2str(quadros_transmitidos(s)) ' E:' num2str(quadros_entregues(s)) ' C:' num2str(quadros_colididos(s)) ' F:' num2str(quadros_fila(s)) ' S:' num2str(quadros_entregues(s)/(quadros_entregues(s)+quadros_colididos(s)))]);
+end
 
 % quadros_entregues
 % quadros_colididos
