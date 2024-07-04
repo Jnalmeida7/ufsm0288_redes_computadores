@@ -5,16 +5,15 @@ rand("state", 0);
 
 % Parametros principais
 tempo_simulacao = 100; % tempo de simulacao
+n=6; % numero de nos da rede
 
 % Lista de eventos executados
 global Log_eventos = [];
 global eventos_executados = 0;
 
-
-n=20; % numero de nos da rede
 global msg = {"hello"};
 global rede = ~eye(n); % matriz de conectividade da rede
-global nos = [];
+global nos = []; % para guardar informações dos nós da rede
 
 function Log_eventos = exec_simulador(Lista_eventos, Log_eventos, tempo_final)
 
@@ -29,6 +28,7 @@ function Log_eventos = exec_simulador(Lista_eventos, Log_eventos, tempo_final)
     if min_instante > tempo_final
         break;
     end
+
     ev = Lista_eventos(min_indice);
     Lista_eventos(min_indice) = []; % Remove o evento da lista, pois sera executado.
     tempo_atual = min_instante;
@@ -49,7 +49,7 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
 
     NovosEventos = [];
 
-    ### configuracao
+    ### configuração do sistema de comunicação
     dist = 100; % 100m
     tempo_prop = dist/3e8; %tempo de propagacao = distancia/velocidade do sinal
     taxa_dados = 1e5; % 100kbps
@@ -59,6 +59,7 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
 
     switch tipo_evento
         case 'N_cfg' % configura nos, inicia variaveis de estado, etc.
+            % inicia estrutura de dados de cada nó
             nos(id).Tx = 'desocupado';
             nos(id).Rx = 'desocupado';
             nos(id).ocupado_ate = 0;
@@ -66,6 +67,7 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
 
             # adiciona uma trasmissao na fila
             % pacote contem origem (src), destino (dst), tamanho (tam) e os dados
+            % dst = 0 significa que é uma transmissão para todos os nós
             pct =  struct('src', id, 'dst', 0, 'tam', 20, 'dados', msg);
 
             e = evento_monta(tempo_atual+rand(1), 'T_ini', id, pct);
@@ -80,14 +82,14 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
              e = evento_monta(nos(id).ocupado_ate+tempo_entre_quadros, 'T_ini', id, pct);
              NovosEventos =[NovosEventos;e];
            else
-             if pct.dst == 0 %pacote de broadcast
+             if pct.dst == 0 %pacote de broadcast (difusao)
                 for nid = find(rede(id,:)>0) % envia uma copia do pacote para cada vizinho
                   disp(['INI T de ' num2str(id) ' para ' num2str(nid)]);
                   e = evento_monta((tempo_atual+tempo_prop), 'R_ini', nid, pct);
                   NovosEventos =[NovosEventos;e];
                 end
              else % envia um pacote para o vizinho, se conectado
-                if find(rede(id,:) == pct.dst)
+                if rede(id,pct.dst) == 1
                   disp(['INI T de ' num2str(id) ' para ' num2str(pct.dst)]);
                   e = evento_monta((tempo_atual+tempo_prop), 'R_ini', pct.dst, pct);
                   NovosEventos =[NovosEventos;e];
@@ -98,12 +100,15 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
              NovosEventos =[NovosEventos;e];
              nos(id).Tx = 'ocupado';
              nos(id).ocupado_ate = tempo_atual+tempo_transmissao;
-        end
+          end
       case 'T_fim' %fim de transmissao
+          if 0
              nos(id).stat.tx +=1;
              nos(id).Tx = 'desocupado';
              nos(id).ocupado_ate = 0;
+          end
       case 'R_ini' %inicio de recepcao
+             if 0
              %if ~isempty(pct); disp(pct); end;
              if strcmp(nos(id).Rx, 'ocupado') ||  strcmp(nos(id).Rx, 'colisao')
                nos(id).Rx  = 'colisao';
@@ -114,6 +119,7 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
              end;
              e = evento_monta((tempo_atual+8*pct.tam/taxa_dados), 'R_fim', id, pct);
              NovosEventos =[NovosEventos;e];
+             end
     case 'R_fim' %fim de recepcao
             nos(id).stat.rx -=1;
             if strcmp(nos(id).Rx, 'ocupado')
@@ -132,8 +138,8 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
             end
        case 'S_fim' %fim de simulacao
              disp('Simulacao encerrada!');
-        otherwise
-            disp(['exec_evento: Evento desconhecido: ' tipo_evento]);
+       otherwise
+             disp(['exec_evento: Evento desconhecido: ' tipo_evento]);
     end;
 
 endfunction;
@@ -169,7 +175,7 @@ Lista_eventos = config_sim(n, tempo_simulacao);
 
 % Executa a simulacao
 Log_eventos = exec_simulador(Lista_eventos, Log_eventos, tempo_simulacao);
-print_struct_array_contents(1);
+##print_struct_array_contents(1);
 ##Log_eventos(:).instante
 ##Log_eventos(:).tipo
 disp(['---Total de eventos=' num2str(eventos_executados)]);
