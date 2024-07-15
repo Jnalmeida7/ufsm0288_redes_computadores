@@ -51,9 +51,11 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
 
     ### configuração do sistema de comunicação
     distancia = 100; % 100m
-    velocidade_sinal = 3e5;
+    velocidade_sinal = 3e8;
     tempo_prop = distancia/velocidade_sinal; %tempo de propagacao = distancia/velocidade do sinal
     taxa_dados = 1e5; % 100kbps
+    tempo_espera_max = 20*8/taxa_dados; % tempo máximo de espera
+    csma = 0; % 1 para CSMA, 0 para Aloha
 
     [t,tipo_evento, id, pct]= evento_desmonta(evento); % retorna os campos do 'evento'
     disp(['EV: ' tipo_evento ' @t=' num2str(t) ' id=' num2str(id)]);
@@ -61,42 +63,41 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
     switch tipo_evento
         case 'N_cfg' % configura nos, inicia variaveis de estado, etc.
             % inicia estrutura de dados de cada nó
+            % Tx e Rx independentes, permitindo comunicação full-duplex
             nos(id).Tx = 'desocupado';
             nos(id).Rx = 'desocupado';
             nos(id).ocupado_ate = 0;
-            nos(id).stat = struct("tx", 0, "rx", 0, "rxok", 0, "col", 0);
+            nos(id).rx_ocupado = 0
+            nos(id).stat = struct("tx", 0, "rx", 0, "rxok", 0, "col", 0, "txok", 0, "col_ack", 0);
 
             # adiciona uma trasmissao na fila
             % pacote contem origem (src), destino (dst), tamanho (tam) e os dados
-            % dst = 0 significa que é uma transmissão para todos os nós
-            pct =  struct('src', id, 'dst', 0, 'tam', 20, 'dados', msg);
+            % dst = 2
+            if (id == 1)
+              dst = 2;
+              pct =  struct('src', id, 'dst', dst, 'tam', 20, 'dados', msg);
+              e = evento_monta(tempo_atual+rand(1), 'T_ini', id, pct);
+              NovosEventos =[NovosEventos;e];
+            endif
 
-            e = evento_monta(tempo_atual+rand(1), 'T_ini', id, pct);
-            NovosEventos =[NovosEventos;e];
-
-            # exemplo: adiciona mais uma trasmissao na fila
-##            e = evento_monta(tempo_atual+rand(1), 'T_ini', id, pct);
-##            NovosEventos =[NovosEventos;e];
       case 'T_ini' %inicio de transmissao
            if strcmp(nos(id).Tx, 'ocupado') % transmissor ocupado?
+             disp(['Tx ocupado']);
              tempo_entre_quadros = 0.2*8*pct.tam/taxa_dados; %20\% do tempo de transmissao
              e = evento_monta(nos(id).ocupado_ate+tempo_entre_quadros, 'T_ini', id, pct);
              NovosEventos =[NovosEventos;e];
+           elseif strcmp(nos(id).Rx, 'ocupado') && csma == 1 % receptor ocupado?
+             tempo_espera = rand(1)*tempo_espera_max;
+             e = evento_monta(tempo_atual + tempo_espera, 'T_ini', id, pct);
+             NovosEventos =[NovosEventos;e];
            else
-             if pct.dst == 0 %pacote de broadcast (difusao)
-                for nid = find(rede(id,:)>0) % envia uma copia do pacote para cada vizinho
-                  disp(['INI T (de ' num2str(id) ' para ' num2str(nid) ')' ]);
-                  pct.dst = nid;
-                  e = evento_monta((tempo_atual+tempo_prop), 'R_ini', nid, pct);
-                  NovosEventos =[NovosEventos;e];
-                end
-             else % envia um pacote para o vizinho, se conectado
-                if rede(id,pct.dst) == 1
-                  disp(['INI T (de ' num2str(id) ' para ' num2str(pct.dst) ')' ]);
-                  e = evento_monta((tempo_atual+tempo_prop), 'R_ini', pct.dst, pct);
-                  NovosEventos =[NovosEventos;e];
-                end
-             end
+             % sempre broadcast (difusao)
+              for nid = find(rede(id,:)>0) % envia uma copia do pacote para cada vizinho
+                disp(['INI T (de ' num2str(id) ' para ' num2str(nid) ')' ]);
+                %pct.dst = nid;
+                e = evento_monta((tempo_atual+tempo_prop), 'R_ini', nid, pct);
+                NovosEventos =[NovosEventos;e];
+              end
              tempo_transmissao = 8*pct.tam/taxa_dados;
              e = evento_monta((tempo_atual+tempo_transmissao), 'T_fim', id, pct);
              NovosEventos =[NovosEventos;e];
@@ -111,30 +112,86 @@ function [NovosEventos] = executa_evento(evento, tempo_atual)
              %if ~isempty(pct); disp(pct); end;
              if strcmp(nos(id).Rx, 'ocupado') ||  strcmp(nos(id).Rx, 'colisao')
                nos(id).Rx  = 'colisao';
-               nos(id).stat.rx +=1;
+               nos(id).rx_ocupado +=1;
              else % desocupado
                nos(id).Rx  = 'ocupado';
-               nos(id).stat.rx = 1;
+               nos(id).rx_ocupado = 1;
              end;
              e = evento_monta((tempo_atual+8*pct.tam/taxa_dados), 'R_fim', id, pct);
              NovosEventos =[NovosEventos;e];
     case 'R_fim' %fim de recepcao
-            nos(id).stat.rx -=1;
+            nos(id).rx_ocupado -=1;
             if strcmp(nos(id).Rx, 'ocupado')
                 disp(['FIM R (de ' num2str(pct.src) ' para ' num2str(pct.dst) ')']);
                 %if ~isempty(pct); disp(pct); end;
                 nos(id).Rx  = 'desocupado';
-                nos(id).stat.rxok +=1; % contador de recepções com sucesso
-                nos(id).stat.rx = 0;
+                nos(id).rx_ocupado = 0;
+                nos(id).stat.rx +=1; % contador de recepções
+
+                % inicia T ACK
+                if (id == pct.dst)
+                  nos(id).stat.rxok +=1; % contador de recepções com sucesso
+                  dst = pct.src;
+                  pct.src = id;
+                  pct.dst = dst;
+                  pct.tam = 2;
+                  pct.msg = 'ACK';
+                  e = evento_monta((tempo_atual), 'T_ini_ack', id, pct);
+                  NovosEventos =[NovosEventos;e];
+                end
+
             elseif  strcmp(nos(id).Rx, 'colisao')
                 disp(['COLISAO (de ' num2str(pct.src) ' para ' num2str(pct.dst) ')']);
-                if(nos(id).stat.rx == 0)
+                if(nos(id).rx_ocupado == 0)
                   nos(id).Rx  = 'desocupado';
                 end
                 nos(id).stat.col +=1;
             else
               disp("ERRO: Estado Rx errado.");
             end
+
+       case 'T_ini_ack'
+            if strcmp(nos(id).Tx, 'desocupado') % transmissor desocupado?
+                disp(['INI T ACK (de ' num2str(pct.src) ' para ' num2str(pct.dst) ')' ]);
+                tempo_transmissao = 8*pct.tam/taxa_dados;
+                e = evento_monta((tempo_atual+tempo_transmissao), 'T_fim_ack', id, pct);
+                NovosEventos =[NovosEventos;e];
+                nos(id).Tx = 'ocupado';
+
+                e = evento_monta((tempo_atual+tempo_prop), 'R_ini_ack', pct.dst, pct);
+                NovosEventos =[NovosEventos;e];
+            endif
+       case 'T_fim_ack'
+            nos(id).Tx = 'desocupado';
+       case 'R_ini_ack'
+              if strcmp(nos(id).Rx, 'ocupado') ||  strcmp(nos(id).Rx, 'colisao')
+               nos(id).Rx  = 'colisao';
+               nos(id).rx_ocupado +=1;
+              else % desocupado
+               nos(id).Rx  = 'ocupado';
+               nos(id).rx_ocupado = 1;
+              end;
+              tempo_transmissao = 8*pct.tam/taxa_dados;
+              e = evento_monta((tempo_atual+tempo_transmissao), 'R_fim_ack', id, pct);
+              NovosEventos =[NovosEventos;e];
+       case 'R_fim_ack'
+            nos(id).rx_ocupado -=1;
+            if strcmp(nos(id).Rx, 'ocupado')
+                % recebeu o ACK
+                disp(['FIM R ACK (de ' num2str(pct.src) ' para ' num2str(pct.dst) ')']);
+                nos(id).stat.txok +=1; % contador de transmissões com sucesso
+                nos(id).Rx  = 'desocupado';
+                nos(id).rx_ocupado = 0;
+            elseif  strcmp(nos(id).Rx, 'colisao')
+                disp(['COLISAO ACK (de ' num2str(pct.src) ' para ' num2str(pct.dst) ')']);
+                if(nos(id).rx_ocupado == 0)
+                  nos(id).Rx  = 'desocupado';
+                end
+                nos(id).stat.col_ack +=1;
+            else
+              disp("ERRO: Estado Rx errado.");
+            end
+
        case 'S_fim' %fim de simulacao
              disp('Simulacao encerrada!');
        otherwise
